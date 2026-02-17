@@ -1,0 +1,6 @@
+[build]
+  command = "pip install -r requirements.txt && streamlit run app_v2.py"
+  publish = "saved_results"
+
+[dev]
+  command = "streamlit run app_v2.py"

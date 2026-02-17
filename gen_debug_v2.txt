@@ -1,0 +1,13 @@
+--- Testing models/gemini-2.0-flash-exp-image-generation ---
+Response Parts: 1
+Part 0:
+  Type: Text
+  Content: This query violates the policy against generating content that is sexual in nature.  While the promp...
+--- Testing models/gemini-2.5-flash-image ---
+Response Parts: 1
+Part 0:
+  Type: Inline Data
+  MimeType: image/png
+  Data Length: 1525391
+--- Testing models/imagen-3.0-generate-001 ---
+Error: 404 models/imagen-3.0-generate-001 is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
