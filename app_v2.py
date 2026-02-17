@@ -13,29 +13,36 @@ st.set_page_config(page_title="유튜브 대본 공장 (Anti-Korean)", page_icon
 # Internal Function to bypass module caching issues & Block Korean
 
 def load_mcp_api_key():
-    """Loads Gemini API Key from MCP config file."""
+    """Loads Gemini API Key from MCP config file or Streamlit Secrets."""
+    # 1. Check Streamlit Secrets (Cloud / Production)
     try:
-        config_path = r"C:\Users\acepa\.gemini\antigravity\mcp_config.json"
+        if "GEMINI_API_KEY" in st.secrets:
+            api_key = st.secrets["GEMINI_API_KEY"]
+            os.environ["GEMINI_API_KEY"] = api_key
+            print("Loaded key from Streamlit Secrets")
+            return api_key
+    except FileNotFoundError:
+        pass # st.secrets not found (local)
+    except Exception as e:
+        print(f"Secrets check failed: {e}")
+
+    # 2. Check Local MCP Config (Local Development)
+    try:
+        # Use a relative path or check user home safely
+        user_home = os.path.expanduser("~")
+        config_path = os.path.join(user_home, ".gemini", "antigravity", "mcp_config.json")
+        
         if os.path.exists(config_path):
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
                 gemini_env = config.get("mcpServers", {}).get("gemini", {}).get("env", {})
                 api_key = gemini_env.get("GEMINI_API_KEY")
                 if api_key:
-                    # Set ENV for other modules
                     os.environ["GEMINI_API_KEY"] = api_key
+                    print("Loaded key from Local MCP Config")
                     return api_key
     except Exception as e:
         print(f"Failed to load MCP config: {e}")
-    
-    # Fallback to Streamlit Secrets (for Netlify/Streamlit Cloud)
-    try:
-        if "GEMINI_API_KEY" in st.secrets:
-            api_key = st.secrets["GEMINI_API_KEY"]
-            os.environ["GEMINI_API_KEY"] = api_key
-            return api_key
-    except:
-        pass
         
     return None
 
@@ -170,6 +177,12 @@ with st.sidebar:
     # Check Env & MCP
     mcp_key = load_mcp_api_key()
     env_key = os.getenv("GEMINI_API_KEY")
+    
+    # Check Streamlit Secrets (Cloud)
+    if not env_key and "GEMINI_API_KEY" in st.secrets:
+        env_key = st.secrets["GEMINI_API_KEY"]
+        os.environ["GEMINI_API_KEY"] = env_key
+        
     manual_key = st.session_state.get('user_api_key', '')
     
     if mcp_key:
