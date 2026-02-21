@@ -9,15 +9,39 @@ from PIL import Image
 import io
 
 def get_api_key():
-    """Retrieves the Gemini API key from mcp_config.json."""
-    config_path = Path("C:/Users/acepa/.gemini/antigravity/mcp_config.json")
+    """Retrieves the Gemini API key from multiple sources."""
+    # 1. Check Streamlit Secrets (Cloud / Production) - PRIORITY
     try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-            return config["mcpServers"]["gemini"]["env"]["GEMINI_API_KEY"]
+        if "GEMINI_API_KEY" in st.secrets:
+            return st.secrets["GEMINI_API_KEY"]
+    except FileNotFoundError:
+        pass
     except Exception as e:
-        print(f"Error reading API key: {e}")
-        return None
+        print(f"Secrets check failed: {e}")
+
+    # 2. Check Environment Variable
+    env_key = os.getenv("GEMINI_API_KEY")
+    if env_key:
+        return env_key
+
+    # 3. Check Local MCP Config (Local Development)
+    try:
+        user_home = os.path.expanduser("~")
+        config_path = os.path.join(user_home, ".gemini", "antigravity", "mcp_config.json")
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+                api_key = config.get("mcpServers", {}).get("gemini", {}).get("env", {}).get("GEMINI_API_KEY")
+                if api_key:
+                    return api_key
+    except Exception as e:
+        print(f"Failed to load MCP config: {e}")
+
+    # 4. Check session state (Manual Input)
+    if 'user_api_key' in st.session_state:
+        return st.session_state['user_api_key']
+
+    return None
 
 def configure_genai():
     api_key = get_api_key()
@@ -26,13 +50,31 @@ def configure_genai():
         return True
     return False
 
+def _safe_generate(model_names, content):
+    """여러 모델을 시도하여 안전하게 생성하는 헬퍼 함수"""
+    last_error = None
+    for model_name in model_names:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(content)
+            if response and response.text:
+                return response.text
+        except Exception as e:
+            last_error = e
+            print(f"Model {model_name} failed: {e}")
+            continue
+    print(f"All models failed. Last error: {last_error}")
+    return None
+
+# 사용할 모델 목록 (우선순위 순)
+MODELS_TO_TRY = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']
+
 def generate_titles(topic, target):
     if not configure_genai():
-        return ["API Key Error"]
+        return None
     
-    model = genai.GenerativeModel('gemini-3-pro-preview')
     prompt = f"""
-    You are a high-end AI script writer (Gemini 3 Pro).
+    You are a high-end AI script writer.
     Topic: {topic}
     Target Audience: {target}
     
@@ -40,14 +82,12 @@ def generate_titles(topic, target):
     They should be engaging, curiosity-driven, and optimized for high CTR.
     Return ONLY the titles as a numbered list (1. Title). Do not include any other text.
     """
-    response = model.generate_content(prompt)
-    return response.text
+    return _safe_generate(MODELS_TO_TRY, prompt)
 
 def generate_outline(title, target, intro_count, body_count, source_material="", images=None):
     if not configure_genai():
-        return "API Key Error"
+        return None
     
-    model = genai.GenerativeModel('gemini-3-pro-preview')
     source_context = f"\n[Source Material/Reference]:\n{source_material}" if source_material else ""
     image_context = "\n[Visual Reference]: Images provided. Analyze them for details." if images else ""
     
@@ -76,14 +116,12 @@ def generate_outline(title, target, intro_count, body_count, source_material="",
     if images:
         content.extend(images)
         
-    response = model.generate_content(content)
-    return response.text
+    return _safe_generate(MODELS_TO_TRY, content)
 
 def generate_script(title, outline, intro_count, body_count, source_material="", images=None, image_style="Cinematic", content_style="정보 전달/리뷰", video_length="10분"):
     if not configure_genai():
-        return "API Key Error"
+        return None
     
-    model = genai.GenerativeModel('gemini-3-pro-preview')
     source_context = f"\n[Source Material/Reference]:\n{source_material}" if source_material else ""
     image_context = "\n[Visual Reference]: Images provided. Analyze them for details." if images else ""
     
@@ -188,8 +226,8 @@ def generate_script(title, outline, intro_count, body_count, source_material="",
     if images:
         content.extend(images)
 
-    response = model.generate_content(content)
-    return response.text
+    return _safe_generate(MODELS_TO_TRY, content)
+
 # Duplicate code section removed
 def create_image_prompt(script_text, style_instruction):
     print(f"[DEBUG] Generating prompt for style: {style_instruction}")
@@ -199,12 +237,10 @@ def create_image_prompt(script_text, style_instruction):
         return f"Hyper-realistic {style_clean}, 2k resolution, cinematic lighting, masterpiece, detailed texture, unreal engine 5 render" 
     
     try:
-        # Model Fallback List
-        models_to_try = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']
         result = None
         last_error = None
 
-        for model_name in models_to_try:
+        for model_name in MODELS_TO_TRY:
             try:
                 model = genai.GenerativeModel(model_name)
                 prompt = f"""
