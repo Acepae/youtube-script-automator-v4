@@ -347,25 +347,43 @@ if st.session_state.step == 100:
     # 1. Titles
     status.text("1. 제목 생성 중...")
     if not st.session_state.titles:
-        st.session_state.titles = sg.generate_titles(topic, target)
+        titles_result = sg.generate_titles(topic, target)
+        # ⚡ FIX: None 응답 처리 - API가 응답하지 않을 때 AttributeError 방지
+        if titles_result is None:
+            st.warning("⚠️ AI가 제목을 생성하지 못했습니다. 기본 제목을 사용합니다.")
+            st.session_state.titles = f"1. {topic} - 완벽 가이드\n2. {topic}의 모든 것\n3. {topic} 총정리"
+        else:
+            st.session_state.titles = titles_result
         try:
             ts = [t.strip() for t in st.session_state.titles.split('\n') if t.strip()]
-            valid = [t for t in ts if t[0].isdigit() or t.startswith('-')]
-            st.session_state.selected_title = valid[0].lstrip('0123456789. -* ') if valid else ts[0]
-        except:
-            st.session_state.selected_title = st.session_state.titles.split('\n')[0]
+            valid = [t for t in ts if t and (t[0].isdigit() or t.startswith('-'))]
+            st.session_state.selected_title = valid[0].lstrip('0123456789. -* ') if valid else (ts[0] if ts else topic)
+        except Exception:
+            st.session_state.selected_title = topic  # 최종 안전망: 주제를 제목으로 사용
     progress_bar.progress(20)
     
     # 2. Outline
     status.text("2. 아웃라인 설계 중...")
     if not st.session_state.outline:
-        st.session_state.outline = sg.generate_outline(st.session_state.selected_title, target, intro_count, body_count, combined_source, images_input)
+        outline_result = sg.generate_outline(st.session_state.selected_title, target, intro_count, body_count, combined_source, images_input)
+        # ⚡ FIX: outline도 None 체크
+        if outline_result is None:
+            st.warning("⚠️ AI가 아웃라인을 생성하지 못했습니다. 기본 아웃라인을 사용합니다.")
+            st.session_state.outline = f"인트로: {topic} 소개\n본문 1: {topic} 핵심 내용\n본문 2: {topic} 상세 분석\n결론: {topic} 정리"
+        else:
+            st.session_state.outline = outline_result
     progress_bar.progress(40)
     
     # 3. Script (Text Only)
     status.text("3. 대본 작성 중 (순수 한국어)...")
     if not st.session_state.script_text_raw:
-        st.session_state.script_text_raw = sg.generate_script(st.session_state.selected_title, st.session_state.outline, intro_count, body_count, combined_source, images_input, img_style_val, content_style, video_length)
+        script_result = sg.generate_script(st.session_state.selected_title, st.session_state.outline, intro_count, body_count, combined_source, images_input, img_style_val, content_style, video_length)
+        # ⚡ FIX: script도 None 체크
+        if script_result is None:
+            st.warning("⚠️ AI가 대본을 생성하지 못했습니다. 기본 대본을 사용합니다.")
+            st.session_state.script_text_raw = f"인트로 1: 안녕하세요! 오늘은 {topic}에 대해 알아보겠습니다.\n대본 1: {topic}은 매우 중요한 주제입니다."
+        else:
+            st.session_state.script_text_raw = script_result
         st.session_state.script_data = parse_script_only(st.session_state.script_text_raw)
     progress_bar.progress(60)
 
